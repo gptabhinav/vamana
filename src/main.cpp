@@ -1,6 +1,7 @@
 #include "vamana/core/types.h"
 #include "vamana/core/neighbor.h"
 #include "vamana/core/distance.h"
+#include "vamana/core/scratch.h"
 #include <iostream>
 #include <vector>
 
@@ -71,6 +72,29 @@ int main(){
     // clean up
     aligned_free_wrapper(a);
     aligned_free_wrapper(b);
+
+    // test scratch space
+    cout << "=== Testing Scratch Space ===" << endl;
+    ScratchSpace scratch;
+    cout << "Initial Scratch Space Capacity: " << scratch.candidates.capacity() << endl;
+    scratch.resize(200);
+    cout << "Resized Scratch Space Capacity: " << scratch.candidates.capacity() << endl;
+
+    scratch.candidates.emplace_back(1, 0.5f);
+    scratch.candidates.emplace_back(2, 0.3f);
+    scratch.distances.push_back(0.5f);
+    scratch.distances.push_back(0.3f);
+
+    cout << "Scratch Candidates Size: " << scratch.candidates.size() << endl;
+    cout << "Scratch Distances Size: " << scratch.distances.size() << endl;
+
+    scratch.clear();
+
+    cout << "After Clear - Scratch Candidates Size: " << scratch.candidates.size() << endl;
+    cout << "After Clear - Scratch Distances Size: " << scratch.distances.size() << endl;
+
+    cout<<"scratch test complete"<<endl;
+
 
     return 0;
 }

@@ -3,7 +3,7 @@
 #include <cstdlib>
 #include "types.h"
 
-// aligned memory allocation for SIMD opeation
+// aligned memory allocation for SIMD operation
 void* aligned_alloc_wrapper(size_t alignment, size_t size);
 
 // aligned memory deallocation for SIMD operation

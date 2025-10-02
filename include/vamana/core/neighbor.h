@@ -28,3 +28,5 @@ struct Neighbor{
 
 typedef std::priority_queue<Neighbor> NeighborPriorityQueue; // min-heap based priority queue for neighbors
 
+void sort_neighbors_by_distance(std::vector<Neighbor>& neighbors);
+void remove_duplicate_neighbors(std::vector<Neighbor>& neighbors);

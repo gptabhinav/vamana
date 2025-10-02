@@ -1,4 +1,4 @@
-#include "neighbors.h"
+#include "vamana/core/neighbor.h"
 #include <algorithm>
 
 void sort_neighbors_by_distance(std::vector<Neighbor>& neighbors){

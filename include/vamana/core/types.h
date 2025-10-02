@@ -1,6 +1,7 @@
+#pragma once
 // we use types.h to standardize types used throughout the codebase
 // or define constants that are being used everywhere in vamana
-// like fore example SIMD_ALIGNMENT, or our default R value, etc
+// like for example SIMD_ALIGNMENT, or our default R value, etc
 
 #include <cstdint>
 

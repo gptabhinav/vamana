@@ -8,6 +8,9 @@ struct Neighbor{
     location_t id;
     distance_t distance;
 
+    // default constructor
+    Neighbor() : id(0), distance(0.0f) {}
+    
     // constructor
     Neighbor(location_t id_, distance_t distance_): id(id_), distance(distance_){}
 

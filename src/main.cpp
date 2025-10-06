@@ -2,6 +2,8 @@
 #include "vamana/core/neighbor.h"
 #include "vamana/core/distance.h"
 #include "vamana/core/scratch.h"
+#include "vamana/core/graph.h"
+#include "vamana/core/index.h"
 #include <iostream>
 #include <vector>
 
@@ -82,19 +84,36 @@ int main(){
 
     scratch.candidates.emplace_back(1, 0.5f);
     scratch.candidates.emplace_back(2, 0.3f);
-    scratch.distances.push_back(0.5f);
-    scratch.distances.push_back(0.3f);
+    scratch.result_buffer.push_back(10);
+    scratch.result_buffer.push_back(20);
 
     cout << "Scratch Candidates Size: " << scratch.candidates.size() << endl;
-    cout << "Scratch Distances Size: " << scratch.distances.size() << endl;
+    cout << "Scratch Result Buffer Size: " << scratch.result_buffer.size() << endl;
 
     scratch.clear();
 
     cout << "After Clear - Scratch Candidates Size: " << scratch.candidates.size() << endl;
-    cout << "After Clear - Scratch Distances Size: " << scratch.distances.size() << endl;
+    cout << "After Clear - Scratch Result Buffer Size: " << scratch.result_buffer.size() << endl;
 
     cout<<"scratch test complete"<<endl;
 
+    // Test graph operations
+    cout << "=== Testing Graph Operations ===" << endl;
+    Graph test_graph(5);
+    test_graph.add_edge(0, 1);
+    test_graph.add_edge(0, 2);
+    test_graph.add_edge(1, 3);
+    test_graph.add_edge(2, 4);
+    
+    cout << "Graph size: " << test_graph.size() << endl;
+    cout << "Node 0 degree: " << test_graph.degree(0) << endl;
+    cout << "Node 0 neighbors: ";
+    for (location_t neighbor : test_graph.get_neighbors(0)) {
+        cout << neighbor << " ";
+    }
+    cout << endl;
+
+    cout << "All component tests completed successfully!" << endl;
 
     return 0;
 }

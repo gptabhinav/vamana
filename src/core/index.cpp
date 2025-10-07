@@ -1,4 +1,5 @@
 #include "vamana/core/index.h"
+#include "vamana/core/io.h"
 #include <algorithm>
 #include <random>
 #include <unordered_set>
@@ -95,7 +96,7 @@ void VamanaIndex::occlude_list(location_t location, std::vector<Neighbor>& pool,
                 
                 const float* point_i = data + pool[i].id * dimension;
                 const float* point_j = data + pool[j].id * dimension;
-                float djk = l2_distance(point_j, point_i, dimension);
+                float djk = adaptive_l2_distance(point_j, point_i, dimension);
                 
                 if (djk == 0.0f) {
                     occlude_factors[j] = std::numeric_limits<float>::max();
@@ -135,7 +136,7 @@ void VamanaIndex::search_and_prune(location_t location) {
             
             for (location_t n : updated_neighbors) {
                 const float* n_data = data + n * dimension;
-                float d = l2_distance(neighbor_data, n_data, dimension);
+                float d = adaptive_l2_distance(neighbor_data, n_data, dimension);
                 neighbor_candidates.emplace_back(n, d);
             }
             
@@ -157,65 +158,71 @@ std::vector<Neighbor> VamanaIndex::greedy_search(const float* query, size_t sear
     auto& candidates = scratch->candidates;
     candidates.clear();
     
+    // Priority queue for unvisited candidates (min-heap by distance)
+    NeighborPriorityQueue unvisited;
+    
+    // Set for O(1) visited lookup - use vector as set for small sizes
+    std::unordered_set<location_t> visited;
+    
     // Initialize with start node
     const float* start_data = data + start_node * dimension;
-    float dist = l2_distance(query, start_data, dimension);
-    candidates.emplace_back(start_node, dist);
-    visited_set.push_back(start_node);
+    float dist = adaptive_l2_distance(query, start_data, dimension);
+    unvisited.push(Neighbor(start_node, dist));
     
     size_t iterations = 0;
-    while (iterations < search_L && !candidates.empty()) {
-        // Sort candidates by distance to get the closest unvisited
-        std::sort(candidates.begin(), candidates.end(), [](const Neighbor& a, const Neighbor& b) {
-            return a.distance < b.distance;
-        });
+    const size_t MAX_ITERATIONS = search_L * 3; // Allow more exploration
+    
+    while (iterations < MAX_ITERATIONS && !unvisited.empty()) {
+        // Get closest unvisited node
+        Neighbor curr = unvisited.top();
+        unvisited.pop();
         
-        // Find the closest unvisited node
-        Neighbor curr;
-        bool found = false;
-        for (auto it = candidates.begin(); it != candidates.end(); ++it) {
-            bool is_visited = std::find(visited_set.begin(), visited_set.end(), it->id) != visited_set.end();
-            if (!is_visited) {
-                curr = *it;
-                found = true;
-                break;
-            }
-        }
+        // Skip if already visited
+        if (visited.count(curr.id)) continue;
         
-        if (!found) break;
-        
-        visited_set.push_back(curr.id);
+        // Mark as visited and add to candidates
+        visited.insert(curr.id);
+        candidates.push_back(curr);
         
         // Explore neighbors
         for (location_t neighbor : graph.get_neighbors(curr.id)) {
-            bool is_visited = std::find(visited_set.begin(), visited_set.end(), neighbor) != visited_set.end();
-            if (!is_visited) {
+            if (!visited.count(neighbor)) {
                 const float* neighbor_data = data + neighbor * dimension;
-                float d = l2_distance(query, neighbor_data, dimension);
-                candidates.emplace_back(neighbor, d);
+                float d = adaptive_l2_distance(query, neighbor_data, dimension);
+                unvisited.push(Neighbor(neighbor, d));
             }
         }
         
-        // Keep only best candidates to prevent explosion
-        if (candidates.size() > search_L * 2) {
-            std::sort(candidates.begin(), candidates.end(), [](const Neighbor& a, const Neighbor& b) {
-                return a.distance < b.distance;
-            });
-            candidates.resize(search_L);
+        // Limit queue size to prevent explosion
+        if (unvisited.size() > search_L * 4) {
+            // Convert to vector, sort, and rebuild queue with best candidates
+            std::vector<Neighbor> temp_candidates;
+            while (!unvisited.empty()) {
+                temp_candidates.push_back(unvisited.top());
+                unvisited.pop();
+            }
+            std::sort(temp_candidates.begin(), temp_candidates.end(), 
+                     [](const Neighbor& a, const Neighbor& b) {
+                         return a.distance < b.distance;
+                     });
+            
+            size_t keep = std::min(search_L * 2, temp_candidates.size());
+            for (size_t i = 0; i < keep; i++) {
+                unvisited.push(temp_candidates[i]);
+            }
         }
         
         iterations++;
     }
     
-    // Sort final candidates and return top results
+    // Sort final candidates by distance
     std::sort(candidates.begin(), candidates.end(), [](const Neighbor& a, const Neighbor& b) {
         return a.distance < b.distance;
     });
     
-    // Return a copy since we're reusing scratch space
-    std::vector<Neighbor> result(candidates.begin(), 
-                                std::min(candidates.end(), candidates.begin() + search_L));
-    return result;
+    // Return top search_L candidates
+    size_t result_size = std::min(search_L, candidates.size());
+    return std::vector<Neighbor>(candidates.begin(), candidates.begin() + result_size);
 }
 
 location_t VamanaIndex::find_medoid() {
@@ -232,7 +239,7 @@ location_t VamanaIndex::find_medoid() {
         for (size_t j = 0; j < sample_size; j++) {
             if (i != j) {
                 const float* point_j = data + j * dimension;
-                avg_dist += l2_distance(point_i, point_j, dimension);
+                avg_dist += adaptive_l2_distance(point_i, point_j, dimension);
             }
         }
         avg_dist /= (sample_size - 1);
@@ -267,10 +274,13 @@ void VamanaIndex::initialize_random_graph() {
 }
 
 void VamanaIndex::save_index(const std::string& filename) const {
-    graph.save(filename + ".graph");
+    // Resolve path to datasets/indexes directory
+    std::string resolved_path = vamana::io::resolve_dataset_path(filename);
+    
+    graph.save(resolved_path + ".graph");
     
     // Save metadata
-    std::ofstream meta(filename + ".meta", std::ios::binary);
+    std::ofstream meta(resolved_path + ".meta", std::ios::binary);
     meta.write(reinterpret_cast<const char*>(&num_points), sizeof(num_points));
     meta.write(reinterpret_cast<const char*>(&dimension), sizeof(dimension));
     meta.write(reinterpret_cast<const char*>(&medoid), sizeof(medoid));
@@ -278,12 +288,20 @@ void VamanaIndex::save_index(const std::string& filename) const {
 }
 
 void VamanaIndex::load_index(const std::string& filename) {
-    graph.load(filename + ".graph");
+    // Resolve path to datasets/indexes directory
+    std::string resolved_path = vamana::io::resolve_dataset_path(filename);
+    
+    graph.load(resolved_path + ".graph");
     
     // Load metadata
-    std::ifstream meta(filename + ".meta", std::ios::binary);
+    std::ifstream meta(resolved_path + ".meta", std::ios::binary);
     meta.read(reinterpret_cast<char*>(&num_points), sizeof(num_points));
     meta.read(reinterpret_cast<char*>(&dimension), sizeof(dimension));
     meta.read(reinterpret_cast<char*>(&medoid), sizeof(medoid));
     meta.close();
+}
+
+void VamanaIndex::set_data(float* data_ptr, size_t points) {
+    data = data_ptr;
+    num_points = points;
 }

@@ -83,6 +83,13 @@ public:
 
     // Utility functions
     location_t get_medoid() const { return medoid; }
+    
+    /**
+     * Set data pointer after loading index (for use after load_index)
+     * @param data_ptr Pointer to the dataset
+     * @param points Number of points in dataset
+     */
+    void set_data(float* data_ptr, size_t points);
     size_t get_num_points() const { return num_points; }
     size_t get_dimension() const { return dimension; }
 

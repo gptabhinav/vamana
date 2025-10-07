@@ -7,6 +7,7 @@ set(VAMANA_SOURCES
     ../src/core/scratch.cpp
     ../src/core/graph.cpp
     ../src/core/index.cpp
+    ../src/core/io.cpp
 )
 
 # Individual Unit Test Executables

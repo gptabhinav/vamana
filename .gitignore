@@ -18,6 +18,10 @@ vamana_overnight
 # Development logbooks
 logbook_overnight.txt
 *logbook*.txt
+IMPLEMENTATION_SUMMARY.md
+
+# Data directories
+datasets/
 
 # IDE files
 .vscode/

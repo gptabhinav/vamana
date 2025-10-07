@@ -1,202 +1,121 @@
-# Vamana - High-Performance Approximate Nearest Neighbor Search
+# Vamana
 
-A C++17 implementation of the Vamana algorithm for efficient approximate nearest neighbor (ANN) search in high-dimensional spaces.
+C++17 implementation of the Vamana algorithm for approximate nearest neighbor search in high-dimensional spaces.
 
-## Features
+## What is this?
 
-- **Fast Graph-based Search**: Implements the Vamana algorithm with diversity-aware neighbor selection
-- **SIMD Optimizations**: AVX2-optimized distance calculations for improved performance
-- **Memory Efficient**: Scratch space pooling to minimize allocations during search
-- **Comprehensive Testing**: Individual unit tests for each component plus integration tests
-- **CMake Build System**: Modern C++ build configuration with OpenMP support
+Vamana is a graph-based algorithm that builds an index for fast approximate nearest neighbor search. It creates a navigable graph where each node represents a data point, then uses greedy search to quickly find approximate neighbors.
 
 ## Requirements
 
-- C++17 compatible compiler (GCC 7+, Clang 5+)
-- CMake 3.12 or higher
-- OpenMP (optional, for parallel operations)
+- C++17 compiler (GCC 7+, Clang 5+)
+- CMake 3.12+
+- OpenMP (optional)
 
-## Building the Project
+## Building
 
-### 1. Clone and Setup
 ```bash
-git clone <repository-url>
-cd vamana
-mkdir build
-cd build
-```
-
-### 2. Configure and Build
-```bash
-# Configure with CMake
-cmake ..
-
-# Build the project
-make
-
-# Or build with parallel jobs
-make -j$(nproc)
-```
-
-### 3. Build Options
-
-For optimized release build:
-```bash
-cmake -DCMAKE_BUILD_TYPE=Release ..
-make
-```
-
-For debug build with symbols:
-```bash
-cmake -DCMAKE_BUILD_TYPE=Debug ..
-make
-```
-
-## Testing the Project
-
-The project includes comprehensive tests organized into individual unit tests and integration tests.
-
-### Running All Tests
-```bash
-# From the build directory
-ctest --verbose
-```
-
-### Running Individual Unit Tests
-```bash
-# From build/test directory
-cd test
-
-# Test individual components
-./test_neighbor     # Neighbor struct tests
-./test_distance     # Distance function tests
-./test_graph        # Graph structure tests
-./test_scratch      # Scratch space tests
-./test_index        # VamanaIndex class tests
-```
-
-### Running Integration Tests
-```bash
-# From build/test directory
-./integration_tests  # End-to-end pipeline tests
-```
-
-### Test Summary
-The test suite includes:
-- **Unit Tests**: 5 separate test executables for each core component
-- **Integration Tests**: End-to-end workflow validation
-- **Coverage**: Construction, basic operations, edge cases, and full pipeline testing
-
-## Running the Demo Program
-
-After building, you can run the demo program:
-```bash
-# From the build directory
-./vamana
-```
-
-> **Note**: If the executable builds as `vamana_overnight`, delete `src/CMakeLists.txt` and rebuild to use the main CMakeLists.txt configuration.
-
-## Usage Example
-
-```cpp
-#include "vamana/core/index.h"
-
-// Create dataset (example: 1000 points in 128 dimensions)
-const size_t num_points = 1000;
-const size_t dimension = 128;
-float* data = new float[num_points * dimension];
-// ... fill data with your vectors ...
-
-// Create Vamana index
-VamanaIndex index(dimension, 32, 64, 1.2f, 500);
-
-// Build the index
-index.build(data, num_points);
-
-// Search for k nearest neighbors
-float query[128];  // your query vector
-auto results = index.search(query, 10);  // find 10 nearest neighbors
-
-// Results contain Neighbor objects with id and distance
-for (const auto& neighbor : results) {
-    std::cout << "ID: " << neighbor.id 
-              << ", Distance: " << neighbor.distance << std::endl;
-}
-```
-
-## Project Structure
-
-```
-vamana/
-├── CMakeLists.txt              # Main build configuration
-├── README.md                   # This file
-├── include/vamana/core/        # Header files
-│   ├── index.h                 # Main VamanaIndex class
-│   ├── graph.h                 # Graph structure
-│   ├── neighbor.h              # Neighbor struct and utilities
-│   ├── distance.h              # Distance functions
-│   ├── scratch.h               # Scratch space for operations
-│   └── types.h                 # Type definitions
-├── src/                        # Implementation files
-│   ├── main.cpp               # Example/demo program
-│   └── core/                  # Core algorithm implementations
-└── test/                      # Test suite
-    ├── CMakeLists.txt         # Test build configuration
-    ├── test_neighbor.cpp      # Neighbor unit tests
-    ├── test_distance.cpp      # Distance function tests
-    ├── test_graph.cpp         # Graph structure tests
-    ├── test_scratch.cpp       # Scratch space tests
-    ├── test_index.cpp         # Index class tests
-    └── integration_tests.cpp  # End-to-end tests
-```
-
-## Algorithm Overview
-
-The Vamana algorithm builds a graph-based index for approximate nearest neighbor search:
-
-1. **Graph Construction**: Creates a directed graph where each node represents a data point
-2. **Diversity-Aware Pruning**: Uses the `occlude_list` algorithm to select diverse neighbors
-3. **Greedy Search**: Traverses the graph to find approximate nearest neighbors efficiently
-4. **Medoid-based Entry**: Uses a computed medoid as the starting point for searches
-
-## Performance Notes
-
-- Compile with `-O3 -march=native -mavx2` for best performance
-- The implementation uses AVX2 SIMD instructions when available
-- OpenMP is used for parallel operations during index construction
-- Scratch space pooling minimizes memory allocations during search
-
-## Quick Reference
-
-### Essential Commands
-```bash
-# Build everything
 mkdir build && cd build
 cmake .. && make
+```
 
+For optimized build:
+```bash
+cmake -DCMAKE_BUILD_TYPE=Release .. && make
+```
+
+## Testing
+
+```bash
 # Run all tests
 ctest
 
-# Run demo program
-./vamana
-
-# Run specific unit test
+# Run specific tests
 ./test/test_index
+./test/integration_tests
 ```
 
-### Project Status
-- ✅ Core Vamana algorithm implemented
-- ✅ Graph-based index construction
-- ✅ Diversity-aware neighbor selection (occlude_list)
-- ✅ Greedy graph search
-- ✅ SIMD-optimized distance functions
-- ✅ Comprehensive test suite (6 test executables)
-- ✅ Memory-efficient scratch space management
+## Quick Example
 
-## Contributing
+Complete workflow using SIFT dataset:
 
-1. Ensure all tests pass: `ctest`
-2. Follow the existing code style
-3. Add tests for new functionality
-4. Update documentation as needed
+```bash
+# 1. Get SIFT dataset
+wget ftp://ftp.irisa.fr/local/texmex/corpus/siftsmall.tar.gz
+tar -xzf siftsmall.tar.gz
+
+# 2. Convert to binary format
+./apps/utils/fvecs_to_fbin --input_file siftsmall/siftsmall_base.fvecs --output_file sift_base.fbin
+./apps/utils/fvecs_to_fbin --input_file siftsmall/siftsmall_query.fvecs --output_file sift_queries.fbin
+./apps/utils/ivecs_to_ibin --input_file siftsmall/siftsmall_groundtruth.ivecs --output_file sift_gt.ibin
+
+# 3. Build index
+./apps/build_memory_index --data_type float --dist_fn l2 \
+  --data_path sift_base.fbin --index_path_prefix sift_index \
+  -R 32 -L 64 --alpha 1.2
+
+# 4. Search with different configurations
+./apps/search_memory_index --data_type float --dist_fn l2 \
+  --data_path sift_base.fbin --index_path_prefix sift_index \
+  --query_file sift_queries.fbin --gt_file sift_gt.ibin \
+  -K 10 -L 10 20 50 100 --result_path results.csv
+```
+
+**Key Parameters:**
+- `R` (32): Max degree per node during construction
+- `L` (64): Search list size during construction  
+- `alpha` (1.2): Pruning parameter (higher = more diversity)
+- `maxc` (750): Max candidates for pruning during construction
+- Search `L` (10,20,50,100): Search list sizes for querying (higher = better recall, slower)
+
+**Index Files:** Your index will be saved as `{prefix}.graph` and `{prefix}.meta`
+
+## Directory Structure
+
+```
+vamana/
+├── apps/                           # Command-line applications
+│   ├── build_memory_index.cpp     # Index builder
+│   ├── search_memory_index.cpp    # Index searcher  
+│   └── utils/                     # Utility programs
+│       ├── fvecs_to_fbin.cpp      # Format converter (.fvecs → .fbin)
+│       ├── ivecs_to_ibin.cpp      # Format converter (.ivecs → .ibin)
+│       └── compute_groundtruth.cpp # Ground truth computation
+├── include/vamana/core/           # Headers
+│   ├── index.h                    # VamanaIndex class
+│   ├── graph.h                    # Graph operations
+│   ├── distance.h                 # Distance functions (SIMD optimized)
+│   ├── neighbor.h                 # Neighbor utilities
+│   ├── scratch.h                  # Memory management
+│   ├── io.h                       # File I/O (.fbin/.ibin formats)
+│   └── types.h                    # Type definitions
+├── src/core/                      # Implementation for headers in include/vamana/core/
+│   ├── index.cpp                  # Main algorithm
+│   ├── graph.cpp                  # Graph construction
+│   ├── distance.cpp               # Distance computations
+│   └── io.cpp                     # Binary file handling
+├── test/                          # Test suite
+└── datasets/                      # Data organization
+    ├── raw/                       # Original datasets
+    └── indexes/                   # Built indexes and converted data
+```
+
+## Applications
+
+After building, executables are organized in `build/`:
+- `apps/build_memory_index` - Build Vamana index from dataset
+- `apps/search_memory_index` - Search index with recall evaluation  
+- `apps/utils/fvecs_to_fbin` - Convert .fvecs files to .fbin format
+- `apps/utils/ivecs_to_ibin` - Convert .ivecs files to .ibin format
+- `apps/utils/compute_groundtruth` - Generate ground truth for evaluation
+
+## Examples and Documentation
+
+- [Complete SIFT Tutorial](docs/sift_tutorial.md) - Step-by-step SIFT dataset example
+- [Parameter Tuning Guide](docs/parameters.md) - How to configure R, L, alpha
+- [File Format Reference](docs/formats.md) - .fbin/.ibin format specifications
+- [Performance Analysis](docs/performance.md) - Benchmarking and optimization tips
+
+## Algorithm
+
+Vamana builds a graph where each node represents a data point. During construction, it uses diversity-aware pruning (occlude_list) to select good neighbors. For search, it performs greedy traversal starting from a computed medoid to find approximate nearest neighbors efficiently.

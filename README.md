@@ -115,6 +115,7 @@ After building, executables are organized in `build/`:
 - [Parameter Tuning Guide](docs/parameters.md) - How to configure R, L, alpha
 - [File Format Reference](docs/formats.md) - .fbin/.ibin format specifications
 - [Performance Analysis](docs/performance.md) - Benchmarking and optimization tips
+- [Downloading Datasets](docs/download_datasets.md) - Downloading standard datasets like sift, siftsmall, etc. 
 
 ## Algorithm
 

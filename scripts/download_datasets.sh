@@ -30,7 +30,7 @@ case $DATASET in
     echo "Downloading SIFT dataset..."
     mkdir -p $DATASETS_DIR/sift
     wget -O $DATASETS_DIR/sift/sift.tar.gz ftp://ftp.irisa.fr/local/texmex/corpus/sift.tar.gz
-    tar -xzf $DATASETS_DIR/sift/sift.tar.gz -C $DATASETS_DIR/sift
+    tar -xzf $DATASETS_DIR/sift/sift.tar.gz -C $DATASETS_DIR/
     rm $DATASETS_DIR/sift/sift.tar.gz
     echo "'$DATASET' dataset downloaded and extracted to '$DATASETS_DIR/$DATASET'."
     ;;
@@ -38,7 +38,7 @@ case $DATASET in
     echo "Downloading SIFT10K dataset..."
     mkdir -p $DATASETS_DIR/siftsmall
     wget -O $DATASETS_DIR/siftsmall/siftsmall.tar.gz ftp://ftp.irisa.fr/local/texmex/corpus/siftsmall.tar.gz
-    tar -xzf $DATASETS_DIR/siftsmall/siftsmall.tar.gz -C $DATASETS_DIR/siftsmall
+    tar -xzf $DATASETS_DIR/siftsmall/siftsmall.tar.gz -C $DATASETS_DIR/
     rm $DATASETS_DIR/siftsmall/siftsmall.tar.gz
     echo "'$DATASET' dataset downloaded and extracted to '$DATASETS_DIR/$DATASET'."
     ;;

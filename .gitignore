@@ -12,6 +12,9 @@ Makefile
 *.exe
 *.out
 
+# datasets
+datasets/
+
 # Development logbooks
 logbook_overnight.txt
 *logbook*.txt

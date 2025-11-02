@@ -4,6 +4,7 @@
 #include "vamana/core/neighbor.h"
 
 #include <vector>
+#include <cstddef>
 
 struct ScratchSpace{
     //  this is a temporary storage for search operations

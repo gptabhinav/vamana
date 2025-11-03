@@ -101,7 +101,7 @@ make search-index
 
 ```
 vamana/
-├── apps/                           # Command-line applications
+├── apps/                          # Command-line application implementations
 │   ├── build_memory_index.cpp     # Index builder
 │   ├── search_memory_index.cpp    # Index searcher  
 │   └── utils/                     # Utility programs
@@ -116,15 +116,15 @@ vamana/
 │   ├── scratch.h                  # Memory management
 │   ├── io.h                       # File I/O (.fbin/.ibin formats)
 │   └── types.h                    # Type definitions
-├── src/core/                      # Implementation for headers in include/vamana/core/
+├── src/core/                      # Implementation corresponding to headers in include/vamana/core/
 │   ├── index.cpp                  # Main algorithm
 │   ├── graph.cpp                  # Graph construction
 │   ├── distance.cpp               # Distance computations
 │   └── io.cpp                     # Binary file handling
+├── scripts/                       # Utility script implementations
+│   ├── download_datasets.sh       # Download script for common datasets like sift, siftsmall
 ├── test/                          # Test suite
-└── datasets/                      # Data organization
-    ├── raw/                       # Original datasets
-    └── indexes/                   # Built indexes and converted data
+├── docs/                          # Documentation and Examples
 ```
 
 ## Applications

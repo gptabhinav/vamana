@@ -1,3 +1,6 @@
+# use this for runtime configuration
+# for static constants in the code, consider looking at types.h
+
 # this seems to work well for sift and siftsmall
 dataset = siftsmall
 

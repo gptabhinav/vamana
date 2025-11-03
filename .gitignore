@@ -11,6 +11,9 @@ datasets/
 # index
 index/
 
+# output
+output/
+
 # Development logbooks
 logbook_overnight.txt
 *logbook*.txt

@@ -70,6 +70,33 @@ tar -xzf siftsmall.tar.gz
 
 **Index Files:** Your index will be saved as `{prefix}.graph` and `{prefix}.meta`
 
+## Easier Workflow Example using MAKE
+
+```bash
+# Specify your dataset in config.mk
+# Current prebuilt support is for sift and siftsmall
+# For other datasets use the workflow described above
+dataset = siftsmall
+```
+
+```bash
+# Do a fresh start
+make clean
+
+# creates the build files
+make build
+
+# downloads and builds the dataset binaries
+make dataset
+
+# build index on the dataset
+make build-index
+
+# search index and save results in a csv file (check output directory)
+# this right now uses K=10, and a list of different beamwidths to compare on L = 10, 20, 50, 100
+make search-index
+```
+
 ## Directory Structure
 
 ```

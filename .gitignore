@@ -8,6 +8,9 @@ build/
 # datasets
 datasets/
 
+# index
+index/
+
 # Development logbooks
 logbook_overnight.txt
 *logbook*.txt

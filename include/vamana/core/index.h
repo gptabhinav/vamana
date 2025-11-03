@@ -26,6 +26,10 @@ private:
     // Scratch space for operations
     std::unique_ptr<ScratchSpace> scratch;
 
+    // stuff needed for multiprocessing using OpenMP
+    size_t num_threads;
+    std::vector<std::unique_ptr<ScratchSpace>> thread_scratch;
+
 public:
     // Constructor/Destructor
     /**
@@ -37,7 +41,8 @@ public:
      * @param maxc Maximum candidates to consider during pruning operations
      */
     VamanaIndex(size_t dim, size_t R = DEFAULT_R, size_t L = DEFAULT_L,
-                float alpha = DEFAULT_ALPHA, size_t maxc = DEFAULT_MAXC);
+                float alpha = DEFAULT_ALPHA, size_t maxc = DEFAULT_MAXC,
+                size_t num_threads = 0); // 0 means use max. available threads here
 
     /**
      * Destructor - Clean up resources (data is owned by caller, so not deleted)
@@ -94,6 +99,9 @@ public:
     size_t get_dimension() const { return dimension; }
 
 private:
+    
+    void initialize_thread_pool();
+
     // Core algorithms
     /**
      * CRITICAL: The occlude_list algorithm - heart of Vamana

@@ -8,10 +8,38 @@
 #include <iostream>
 #include <fstream>
 
-VamanaIndex::VamanaIndex(size_t dim, size_t R, size_t L, float alpha, size_t maxc) 
+VamanaIndex::VamanaIndex(size_t dim, size_t R, size_t L, float alpha, size_t maxc, size_t num_threads) 
     : data(nullptr), num_points(0), dimension(dim), medoid(0),
       R(R), L(L), alpha(alpha), maxc(maxc) {
+
+    // right now keeping this as a single scratch space, to make it backward compatible
     scratch = std::make_unique<ScratchSpace>();
+    
+    // if number of threads arent specified. 
+    // use maximum available threads using OpenMP configuration
+    // or if OpenMP is not available or configured
+    // just use one thread
+    if(this->num_threads==0){
+        #ifdef _OPENMP
+            this->num_threads = omp_get_max_threads();
+        #else
+            this->num_threads = 1;
+        #endif
+    }
+
+    // initialize thread pool
+    initialize_thread_pool();
+}
+
+void VamanaIndex::initialize_thread_pool(){
+    // we'll probably need to initialize our thread pool multiple times
+    // and we would want to get rid of the old scratch entries
+    thread_scratch.clear();
+    thread_scratch.reserve(this->num_threads);
+
+    for(size_t i=0; i<this->num_threads; i++){
+        thread_scratch.push_back(std::make_unique<ScratchSpace>());
+    }
 }
 
 VamanaIndex::~VamanaIndex() {

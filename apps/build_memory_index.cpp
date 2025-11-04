@@ -15,6 +15,7 @@ void print_usage(const char* program_name) {
     std::cout << "  -R                  Max degree of each node in the graph" << std::endl;
     std::cout << "  -L                  Search list size during construction" << std::endl;
     std::cout << "  --alpha             Alpha parameter for pruning (e.g., 1.2)" << std::endl;
+    std::cout << "  -T, --num_threads   Number of threads (0 = use all cores)" << std::endl;
 }
 
 int main(int argc, char* argv[]) {
@@ -26,6 +27,7 @@ int main(int argc, char* argv[]) {
     std::string data_type, dist_fn, data_path, index_path_prefix;
     uint32_t R = 0, L = 0;
     float alpha = 0.0f;
+    uint32_t num_threads = 0; // 0 means use all cores
     
     // Parse arguments
     for (int i = 1; i < argc; i++) {
@@ -45,6 +47,8 @@ int main(int argc, char* argv[]) {
             L = std::stoul(argv[++i]);
         } else if (arg == "--alpha" && i + 1 < argc) {
             alpha = std::stof(argv[++i]);
+        } else if (arg == "--num_threads" || arg == "-T" && i + 1 < argc){
+            num_threads = std::stoul(argv[++i]);
         } else {
             std::cout << "Unknown argument: " << arg << std::endl;
             print_usage(argv[0]);
@@ -86,7 +90,7 @@ int main(int argc, char* argv[]) {
         vamana::io::load_fbin(data_path, data, num_points, dimension);
         
         // Create and build index
-        VamanaIndex index(dimension, R, L, alpha, 750);  // maxc = 750
+        VamanaIndex index(dimension, R, L, alpha, 750, num_threads);  // maxc = 750
         
         std::cout << "Building Vamana index..." << std::endl;
         auto start_time = std::chrono::high_resolution_clock::now();

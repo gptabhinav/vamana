@@ -1,5 +1,6 @@
 #include "vamana/core/index.h"
 #include "vamana/core/io.h"
+#include <omp.h>
 #include <algorithm>
 #include <random>
 #include <unordered_set>
@@ -37,9 +38,13 @@ void VamanaIndex::initialize_thread_pool(){
     thread_scratch.clear();
     thread_scratch.reserve(this->num_threads);
 
-    for(size_t i=0; i<this->num_threads; i++){
+    for(size_t i = 0; i <this->num_threads; i++){
         thread_scratch.push_back(std::make_unique<ScratchSpace>());
     }
+
+    #ifdef _OPENMP
+    omp_set_num_threads(num_threads)
+    #endif
 }
 
 VamanaIndex::~VamanaIndex() {

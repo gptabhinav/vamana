@@ -52,3 +52,7 @@ Thumbs.db
 *.su
 *.idb
 *.pdb
+
+# Local planning documents
+PARALLEL_OPTIMIZATION_PLAN.md
+what_am_i_doing.md

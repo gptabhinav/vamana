@@ -9,27 +9,10 @@
 #include <iostream>
 #include <fstream>
 
-VamanaIndex::VamanaIndex(size_t dim, size_t R, size_t L, float alpha, size_t maxc, size_t num_threads) 
+VamanaIndex::VamanaIndex(size_t dim, size_t R, size_t L, float alpha, size_t maxc) 
     : data(nullptr), num_points(0), dimension(dim), medoid(0),
-      R(R), L(L), alpha(alpha), maxc(maxc), num_threads(num_threads) {
+      R(R), L(L), alpha(alpha), maxc(maxc){
 
-    // right now keeping this as a single scratch space, to make it backward compatible
-    scratch = std::make_unique<ScratchSpace>();
-    
-    // if number of threads arent specified. 
-    // use maximum available threads using OpenMP configuration
-    // or if OpenMP is not available or configured
-    // just use one thread
-    if(this->num_threads==0){
-        #ifdef _OPENMP
-            this->num_threads = omp_get_max_threads();
-        #else
-            this->num_threads = 1;
-        #endif
-    }
-
-    // initialize thread pool
-    initialize_thread_pool();
 }
 
 void VamanaIndex::initialize_thread_pool(){
@@ -38,12 +21,17 @@ void VamanaIndex::initialize_thread_pool(){
     thread_scratch.clear();
     thread_scratch.reserve(this->num_threads);
 
-    for(size_t i = 0; i <this->num_threads; i++){
+    std::cout << "Initializing thread pool with " << this->num_threads << " threads..." << std::endl;
+
+    for(size_t i = 0; i < this->num_threads; i++){
         thread_scratch.push_back(std::make_unique<ScratchSpace>());
     }
 
+    std::cout << "Thread scratch size: " << thread_scratch.size() << std::endl;
+    
     #ifdef _OPENMP
     omp_set_num_threads(num_threads);
+    std::cout << "OpenMP threads set to: " << num_threads << std::endl;
     #endif
 }
 
@@ -51,9 +39,26 @@ VamanaIndex::~VamanaIndex() {
     // data is owned by caller, don't delete it
 }
 
-void VamanaIndex::build(float* data_ptr, size_t num_pts) {
+void VamanaIndex::build(float* data_ptr, size_t num_pts, size_t num_threads) {
     data = data_ptr;
     num_points = num_pts;
+
+    // if number of threads arent specified. 
+    // use maximum available threads using OpenMP configuration
+    // or if OpenMP is not available or configured
+    // just use one thread
+    if(num_threads==0){
+        #ifdef _OPENMP
+            num_threads = omp_get_max_threads();
+        #else
+            num_threads = 1;
+        #endif
+    }
+
+    // Store for use in thread pool
+    this->num_threads = num_threads;
+    
+    initialize_thread_pool();
     
     // Initialize graph
     graph.resize(num_points);
@@ -64,21 +69,55 @@ void VamanaIndex::build(float* data_ptr, size_t num_pts) {
     // Find medoid
     medoid = find_medoid();
     
-    // Iterative improvement
+    // Iterative improvement -- PARALLEL
+    // 2048 is just what is being used in DiskANN, it is probably good middleground for performance
+    // try this out later, and see what works best based on the size of dataset
+    // should this be made configurable (for later) 
+    #pragma omp parallel for schedule(dynamic, 2048)
     for (size_t i = 0; i < num_points; i++) {
         search_and_prune(i);
         
-        // Progress indicator
-        if (i % 1000 == 0) {
-            std::cout << "Processed " << i << "/" << num_points << " nodes" << std::endl;
+        // simple progress indication based on DiskANN
+        // can show percentges out of order. only roughly tells what percentage of data is processed
+        // this prints every 100000 nodes. so for a 10k dataset, it prints 10 times
+        if (i % 100000 == 0) {
+
+            // progress output is the name of the critical section
+            // same named critical section occupy the same lock, and different named ones occupy different locks
+            #pragma omp critical(progress_output)
+            {
+                std::cout << "\r " << (100 * i) / num_points << "% index" << std::endl;
+            }
         }
     }
+
+    std::cout << std::endl;
 }
 
-std::vector<Neighbor> VamanaIndex::search(const float* query, size_t k, size_t search_L) {
+std::vector<Neighbor> VamanaIndex::search(const float* query, size_t k, size_t search_L, size_t num_threads) {
+    // if number of threads arent specified, or OpenMP is not being used, use 1 thread 
+    // use maximum available threads using OpenMP configuration
+    // or if OpenMP is not available or configured
+    // just use one thread
+    if(num_threads==0){
+        #ifdef _OPENMP
+            num_threads = omp_get_max_threads();
+        #else
+            num_threads = 1;
+        #endif
+    }
+
+    // Store for use in thread pool
+    this->num_threads = num_threads;
+    
+    initialize_thread_pool();
+
     if (search_L == 0) search_L = L;
     
-    auto candidates = greedy_search(query, search_L, medoid);
+    // Use thread 0 scratch space for now (single-threaded search)
+    // TODO: Parallelize query processing in future iteration
+    auto& local_scratch = thread_scratch[0];
+    auto candidates = greedy_search(query, search_L, medoid, local_scratch.get());
     
     // Return top k
     if (candidates.size() > k) {
@@ -90,7 +129,7 @@ std::vector<Neighbor> VamanaIndex::search(const float* query, size_t k, size_t s
 
 // CRITICAL: The occlude_list algorithm - heart of Vamana
 void VamanaIndex::occlude_list(location_t location, std::vector<Neighbor>& pool, 
-                              std::vector<location_t>& result) {
+                              std::vector<location_t>& result, ScratchSpace* scratch) {
     if (pool.empty()) return;
     
     // CRITICAL: Must be sorted by distance
@@ -143,14 +182,31 @@ void VamanaIndex::occlude_list(location_t location, std::vector<Neighbor>& pool,
 }
 
 void VamanaIndex::search_and_prune(location_t location) {
+
+    // get thread-local scratch space
+    #ifdef _OPENMP
+    int thread_id = omp_get_thread_num();
+    #else
+    int thread_id = 0;
+    #endif
+
+    // Safety check - ensure thread_id is within bounds
+    if (thread_id >= (int)thread_scratch.size()) {
+        thread_id = 0;  // Fallback to thread 0
+    }
+
+    // if num of threads is just 1, or OpenMP is not being used
+    // there will be 1 scratch space in our thread scratch
+    auto& local_scratch = thread_scratch[thread_id];
+
     // Search for candidates
     const float* query = data + location * dimension;
-    auto candidates = greedy_search(query, L, medoid);
+    auto candidates = greedy_search(query, L, medoid, local_scratch.get());
     
-    // Use scratch space for result
-    auto& pruned = scratch->result_buffer;
+    // Use local scratch space for result
+    auto& pruned = local_scratch->result_buffer;
     pruned.clear();
-    occlude_list(location, candidates, pruned);
+    occlude_list(location, candidates, pruned, local_scratch.get());
     
     // Update graph
     graph.set_neighbors(location, pruned);
@@ -162,8 +218,8 @@ void VamanaIndex::search_and_prune(location_t location) {
         updated_neighbors.push_back(location);
         
         if (updated_neighbors.size() > R) {
-            // Re-prune neighbor's list using scratch space
-            auto& neighbor_candidates = scratch->neighbor_pool;
+            // Re-prune neighbor's list using local scratch space
+            auto& neighbor_candidates = local_scratch->neighbor_pool;
             neighbor_candidates.clear();
             const float* neighbor_data = data + neighbor * dimension;
             
@@ -174,9 +230,9 @@ void VamanaIndex::search_and_prune(location_t location) {
             }
             
             // Reuse result_buffer for pruned neighbors
-            auto& pruned_neighbors = scratch->result_buffer;
+            auto& pruned_neighbors = local_scratch->result_buffer;
             pruned_neighbors.clear();
-            occlude_list(neighbor, neighbor_candidates, pruned_neighbors);
+            occlude_list(neighbor, neighbor_candidates, pruned_neighbors, local_scratch.get());
             graph.set_neighbors(neighbor, pruned_neighbors);
         } else {
             graph.set_neighbors(neighbor, updated_neighbors);
@@ -184,7 +240,8 @@ void VamanaIndex::search_and_prune(location_t location) {
     }
 }
 
-std::vector<Neighbor> VamanaIndex::greedy_search(const float* query, size_t search_L, location_t start_node) {
+std::vector<Neighbor> VamanaIndex::greedy_search(const float* query, size_t search_L,
+    location_t start_node, ScratchSpace* scratch) {
     // Use scratch space to avoid allocations
     scratch->reset_visited();
     auto& visited_set = scratch->visited;

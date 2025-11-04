@@ -8,7 +8,7 @@ alpha = 1.2
 
 # this configuration format seems to work well for sift and siftsmall
 # might have to update this when i work with glove, gist and others
-dataset = siftsmall
+dataset = sift
 
 dataset_root =  datasets/${dataset}
 

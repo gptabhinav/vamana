@@ -25,6 +25,7 @@ void print_usage(const char* program_name) {
     std::cout << "  --gt_file           Ground truth file (.ibin format)" << std::endl;
     std::cout << "  -K                  Number of nearest neighbors to return" << std::endl;
     std::cout << "  -L                  Search list sizes (space-separated list)" << std::endl;
+    std::cout << "  -T, --num_threads   Number of threads (0 = use all cores, default = 1)" << std::endl;
     std::cout << "  --result_path       Output directory for results" << std::endl;
 }
 
@@ -47,7 +48,7 @@ double calculate_recall(const std::vector<uint32_t>& results, const uint32_t* gr
 
 SearchResult search_with_L(VamanaIndex& index, float* query_data, uint32_t num_queries, 
                           uint32_t dimension, uint32_t K, uint32_t L, 
-                          const uint32_t* ground_truth_data, uint32_t gt_k) {
+                          const uint32_t* ground_truth_data, uint32_t gt_k, size_t num_threads) {
     SearchResult result;
     result.results.resize(num_queries);
     
@@ -56,7 +57,7 @@ SearchResult search_with_L(VamanaIndex& index, float* query_data, uint32_t num_q
     
     for (uint32_t q = 0; q < num_queries; q++) {
         const float* query = query_data + q * dimension;
-        auto neighbors = index.search(query, K, L);
+        auto neighbors = index.search(query, K, L, num_threads);
         
         // Extract IDs
         result.results[q].resize(neighbors.size());
@@ -90,6 +91,7 @@ int main(int argc, char* argv[]) {
     std::string data_type, dist_fn, data_path, index_path_prefix, query_file, gt_file, result_path;
     uint32_t K = 0;
     std::vector<uint32_t> L_values;
+    uint32_t num_threads = 1; // by default just keep 1 thread for search
     
     // Parse arguments
     for (int i = 1; i < argc; i++) {
@@ -114,6 +116,9 @@ int main(int argc, char* argv[]) {
             while (i + 1 < argc && argv[i + 1][0] != '-') {
                 L_values.push_back(std::stoul(argv[++i]));
             }
+        } else if (arg == "--num_threads" || arg == "-T" && i + 1 < argc) {
+            num_threads = std::stoul(argv[++i]);
+
         } else if (arg == "--result_path" && i + 1 < argc) {
             result_path = argv[++i];
         } else {
@@ -198,7 +203,7 @@ int main(int argc, char* argv[]) {
         
         for (uint32_t L : L_values) {
             SearchResult result = search_with_L(index, query_data, num_queries, query_dim, 
-                                              K, L, ground_truth_data, gt_k);
+                                              K, L, ground_truth_data, gt_k, num_threads);
             
             std::cout << L << "\t" << result.qps << "\t" << result.average_recall << std::endl;
             results_file << L << "," << result.qps << "," << result.average_recall << std::endl;

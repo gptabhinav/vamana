@@ -41,8 +41,7 @@ public:
      * @param maxc Maximum candidates to consider during pruning operations
      */
     VamanaIndex(size_t dim, size_t R = DEFAULT_R, size_t L = DEFAULT_L,
-                float alpha = DEFAULT_ALPHA, size_t maxc = DEFAULT_MAXC,
-                size_t num_threads = 0); // 0 means use max. available threads here
+                float alpha = DEFAULT_ALPHA, size_t maxc = DEFAULT_MAXC);
 
     /**
      * Destructor - Clean up resources (data is owned by caller, so not deleted)
@@ -58,8 +57,9 @@ public:
      * 3. Iteratively improves connections using search_and_prune
      * @param data Pointer to the dataset (num_points * dimension floats)
      * @param num_points Number of vectors in the dataset
+     * @param num_threads Number of threads to use for parallel construction (0 = select maximum available threads)
      */
-    void build(float *data, size_t num_points);
+    void build(float *data, size_t num_points, size_t num_threads = 0);
     
     /**
      * Search for k nearest neighbors to the query vector
@@ -67,9 +67,10 @@ public:
      * @param query Query vector (dimension floats)
      * @param k Number of nearest neighbors to return
      * @param search_L Candidate list size for this search (0 = use default L)
+     * @param num_threads Number of threads to use for parallel search (0 = select maximum available threads, default = 1)
      * @return Vector of k nearest neighbors sorted by distance
      */
-    std::vector<Neighbor> search(const float *query, size_t k, size_t search_L = 0);
+    std::vector<Neighbor> search(const float *query, size_t k, size_t search_L = 0, size_t num_threads = 1);
 
     // I/O operations
     /**
@@ -111,9 +112,10 @@ private:
      * @param location The node we're selecting neighbors for
      * @param pool Candidate neighbors sorted by distance
      * @param result Output vector of selected diverse neighbors
+     * @param scratch Scratch space for temporary storage during pruning
      */
     void occlude_list(location_t location, std::vector<Neighbor> &pool,
-                      std::vector<location_t> &result);
+                      std::vector<location_t> &result, ScratchSpace* scratch);
     
     /**
      * Search and prune operation for a single node during index construction
@@ -149,7 +151,9 @@ private:
      * @param query Query vector to search for
      * @param search_L Maximum number of candidates to explore
      * @param start_node Node to start the search from (usually medoid)
+     * @param scratch Scratch space for temporary storage during search
      * @return Candidate neighbors found during traversal
      */
-    std::vector<Neighbor> greedy_search(const float *query, size_t search_L, location_t start_node);
+    std::vector<Neighbor> greedy_search(const float *query, size_t search_L, 
+        location_t start_node, ScratchSpace* scratch);
 };

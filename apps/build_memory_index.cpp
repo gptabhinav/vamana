@@ -90,12 +90,12 @@ int main(int argc, char* argv[]) {
         vamana::io::load_fbin(data_path, data, num_points, dimension);
         
         // Create and build index
-        VamanaIndex index(dimension, R, L, alpha, 750, num_threads);  // maxc = 750
+        VamanaIndex index(dimension, R, L, alpha, 750);  // maxc = 750
         
         std::cout << "Building Vamana index..." << std::endl;
         auto start_time = std::chrono::high_resolution_clock::now();
         
-        index.build(data, num_points);
+        index.build(data, num_points, num_threads);
         
         auto build_time = std::chrono::high_resolution_clock::now() - start_time;
         auto build_ms = std::chrono::duration_cast<std::chrono::milliseconds>(build_time).count();

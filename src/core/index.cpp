@@ -43,7 +43,7 @@ void VamanaIndex::initialize_thread_pool(){
     }
 
     #ifdef _OPENMP
-    omp_set_num_threads(num_threads)
+    omp_set_num_threads(num_threads);
     #endif
 }
 

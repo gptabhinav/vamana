@@ -11,7 +11,7 @@
 
 VamanaIndex::VamanaIndex(size_t dim, size_t R, size_t L, float alpha, size_t maxc, size_t num_threads) 
     : data(nullptr), num_points(0), dimension(dim), medoid(0),
-      R(R), L(L), alpha(alpha), maxc(maxc) {
+      R(R), L(L), alpha(alpha), maxc(maxc), num_threads(num_threads) {
 
     // right now keeping this as a single scratch space, to make it backward compatible
     scratch = std::make_unique<ScratchSpace>();

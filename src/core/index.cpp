@@ -11,28 +11,35 @@
 
 VamanaIndex::VamanaIndex(size_t dim, size_t R, size_t L, float alpha, size_t maxc) 
     : data(nullptr), num_points(0), dimension(dim), medoid(0),
-      R(R), L(L), alpha(alpha), maxc(maxc){
+      R(R), L(L), alpha(alpha), maxc(maxc),
+      build_threads(0), search_threads(0) {
 
 }
 
-void VamanaIndex::initialize_thread_pool(){
-    // we'll probably need to initialize our thread pool multiple times
-    // and we would want to get rid of the old scratch entries
-    thread_scratch.clear();
-    thread_scratch.reserve(this->num_threads);
+void VamanaIndex::initialize_build_scratch(size_t num_threads) {
+    build_scratch.clear();
+    build_scratch.reserve(num_threads);
 
-    std::cout << "Initializing thread pool with " << this->num_threads << " threads..." << std::endl;
+    std::cout << "Initializing build scratch spaces for " << num_threads << " threads..." << std::endl;
 
-    for(size_t i = 0; i < this->num_threads; i++){
-        thread_scratch.push_back(std::make_unique<ScratchSpace>());
+    for(size_t i = 0; i < num_threads; i++){
+        build_scratch.push_back(std::make_unique<ScratchSpace>());
     }
-
-    std::cout << "Thread scratch size: " << thread_scratch.size() << std::endl;
     
     #ifdef _OPENMP
     omp_set_num_threads(num_threads);
-    std::cout << "OpenMP threads set to: " << num_threads << std::endl;
     #endif
+}
+
+void VamanaIndex::initialize_search_scratch(size_t num_threads) {
+    search_scratch.clear();
+    search_scratch.reserve(num_threads);
+
+    std::cout << "Initializing search scratch spaces for " << num_threads << " threads..." << std::endl;
+
+    for(size_t i = 0; i < num_threads; i++){
+        search_scratch.push_back(std::make_unique<ScratchSpace>());
+    }
 }
 
 VamanaIndex::~VamanaIndex() {
@@ -43,11 +50,8 @@ void VamanaIndex::build(float* data_ptr, size_t num_pts, size_t num_threads) {
     data = data_ptr;
     num_points = num_pts;
 
-    // if number of threads arent specified. 
-    // use maximum available threads using OpenMP configuration
-    // or if OpenMP is not available or configured
-    // just use one thread
-    if(num_threads==0){
+    // Determine build thread count
+    if(num_threads == 0){
         #ifdef _OPENMP
             num_threads = omp_get_max_threads();
         #else
@@ -55,10 +59,8 @@ void VamanaIndex::build(float* data_ptr, size_t num_pts, size_t num_threads) {
         #endif
     }
 
-    // Store for use in thread pool
-    this->num_threads = num_threads;
-    
-    initialize_thread_pool();
+    build_threads = num_threads;
+    initialize_build_scratch(build_threads);
     
     // Initialize graph
     graph.resize(num_points);
@@ -94,29 +96,32 @@ void VamanaIndex::build(float* data_ptr, size_t num_pts, size_t num_threads) {
     std::cout << std::endl;
 }
 
-std::vector<Neighbor> VamanaIndex::search(const float* query, size_t k, size_t search_L, size_t num_threads) {
-    // if number of threads arent specified, or OpenMP is not being used, use 1 thread 
-    // use maximum available threads using OpenMP configuration
-    // or if OpenMP is not available or configured
-    // just use one thread
-    if(num_threads==0){
-        #ifdef _OPENMP
-            num_threads = omp_get_max_threads();
-        #else
-            num_threads = 1;
-        #endif
-    }
-
-    // Store for use in thread pool
-    this->num_threads = num_threads;
+std::vector<Neighbor> VamanaIndex::search(const float* query, size_t k, size_t search_L) {
+    // Single-threaded per-query search
+    // For batch parallelism, call this from multiple threads
     
-    initialize_thread_pool();
-
     if (search_L == 0) search_L = L;
     
-    // Use thread 0 scratch space for now (single-threaded search)
-    // TODO: Parallelize query processing in future iteration
-    auto& local_scratch = thread_scratch[0];
+    // Ensure search scratch is initialized (should be done during load_index)
+    if (search_scratch.empty()) {
+        std::cerr << "Error: Search scratch not initialized. Call load_index() with num_threads parameter!" << std::endl;
+        throw std::runtime_error("Search scratch not initialized");
+    }
+    
+    // Get thread-local scratch space (for parallel batch search)
+    #ifdef _OPENMP
+    int thread_id = omp_get_thread_num();
+    #else
+    int thread_id = 0;
+    #endif
+    
+    // Safety check: ensure thread_id is valid
+    if (thread_id >= (int)search_scratch.size()) {
+        std::cerr << "Warning: thread_id " << thread_id << " >= search_scratch.size() " << search_scratch.size() << std::endl;
+        thread_id = 0;
+    }
+    
+    auto& local_scratch = search_scratch[thread_id];
     auto candidates = greedy_search(query, search_L, medoid, local_scratch.get());
     
     // Return top k
@@ -183,7 +188,7 @@ void VamanaIndex::occlude_list(location_t location, std::vector<Neighbor>& pool,
 
 void VamanaIndex::search_and_prune(location_t location) {
 
-    // get thread-local scratch space
+    // Get thread-local build scratch space
     #ifdef _OPENMP
     int thread_id = omp_get_thread_num();
     #else
@@ -191,13 +196,11 @@ void VamanaIndex::search_and_prune(location_t location) {
     #endif
 
     // Safety check - ensure thread_id is within bounds
-    if (thread_id >= (int)thread_scratch.size()) {
+    if (thread_id >= (int)build_scratch.size()) {
         thread_id = 0;  // Fallback to thread 0
     }
 
-    // if num of threads is just 1, or OpenMP is not being used
-    // there will be 1 scratch space in our thread scratch
-    auto& local_scratch = thread_scratch[thread_id];
+    auto& local_scratch = build_scratch[thread_id];
 
     // Search for candidates
     const float* query = data + location * dimension;
@@ -377,7 +380,7 @@ void VamanaIndex::save_index(const std::string& filename) const {
     meta.close();
 }
 
-void VamanaIndex::load_index(const std::string& filename) {
+void VamanaIndex::load_index(const std::string& filename, size_t num_threads) {
     // Resolve path to datasets/indexes directory
     std::string resolved_path = vamana::io::resolve_dataset_path(filename);
     
@@ -389,6 +392,18 @@ void VamanaIndex::load_index(const std::string& filename) {
     meta.read(reinterpret_cast<char*>(&dimension), sizeof(dimension));
     meta.read(reinterpret_cast<char*>(&medoid), sizeof(medoid));
     meta.close();
+    
+    // Initialize search scratch spaces for parallel batch search
+    if (num_threads == 0) {
+        #ifdef _OPENMP
+        num_threads = omp_get_max_threads();
+        #else
+        num_threads = 1;
+        #endif
+    }
+    
+    search_threads = num_threads;
+    initialize_search_scratch(search_threads);
 }
 
 void VamanaIndex::set_data(float* data_ptr, size_t points) {

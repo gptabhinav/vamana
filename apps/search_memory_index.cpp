@@ -7,6 +7,10 @@
 #include <fstream>
 #include <sstream>
 
+#ifdef _OPENMP
+#include <omp.h>
+#endif
+
 struct SearchResult {
     std::vector<std::vector<uint32_t>> results;  // [query][neighbor]
     double qps;
@@ -55,9 +59,20 @@ SearchResult search_with_L(VamanaIndex& index, float* query_data, uint32_t num_q
     auto start_time = std::chrono::high_resolution_clock::now();
     double total_recall = 0.0;
     
-    for (uint32_t q = 0; q < num_queries; q++) {
+    // Set number of threads for parallel search (DiskANN pattern)
+    #ifdef _OPENMP
+    if (num_threads > 0) {
+        omp_set_num_threads(num_threads);
+    }
+    #endif
+    
+    // Parallelize query processing - each thread handles one query at a time
+    #pragma omp parallel for schedule(dynamic, 1) reduction(+:total_recall)
+    for (int64_t q = 0; q < (int64_t)num_queries; q++) {
         const float* query = query_data + q * dimension;
-        auto neighbors = index.search(query, K, L, num_threads);
+        // search() is single-threaded per query
+        // Parallelism is achieved here at the batch level
+        auto neighbors = index.search(query, K, L);
         
         // Extract IDs
         result.results[q].resize(neighbors.size());
@@ -179,7 +194,18 @@ int main(int argc, char* argv[]) {
         
         // Load index and data for search
         VamanaIndex index(query_dim, 32, 64, 1.2f, 500);  // Default params, will be overwritten by load
-        index.load_index(index_path_prefix);
+        
+        // Determine number of threads for parallel batch search
+        #ifdef _OPENMP
+        if (num_threads == 0) {
+            num_threads = omp_get_max_threads();
+        }
+        #else
+        num_threads = 1;
+        #endif
+        
+        // Load index and initialize search scratch spaces
+        index.load_index(index_path_prefix, num_threads);
         
         // Load the original data for distance calculations
         float* base_data = nullptr;

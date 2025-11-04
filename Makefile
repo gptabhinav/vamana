@@ -53,7 +53,7 @@ build-index: ${dataset.index}.graph ${dataset.index}.meta
 # Results depend on index files and query files
 ${dataset.results}: ${dataset.index}.graph ${dataset.index}.meta ${dataset.query.bin} ${dataset.groundtruth.bin} | build/apps/search_memory_index
 	mkdir -p ${results_root}
-	build/apps/search_memory_index --data_type float --dist_fn l2 --data_path ${dataset.base.bin} --index_path_prefix ${dataset.index} --query_file ${dataset.query.bin} --gt_file ${dataset.groundtruth.bin} -K 10 -L 10 20 50 100 --result_path ${dataset.results}
+	build/apps/search_memory_index --data_type float --dist_fn l2 --data_path ${dataset.base.bin} --index_path_prefix ${dataset.index} --query_file ${dataset.query.bin} --gt_file ${dataset.groundtruth.bin} -K 10 -L 10 20 50 100 --result_path ${dataset.results} -T 0
 
 # Alias for convenience
 search-index: ${dataset.results}

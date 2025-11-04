@@ -26,9 +26,13 @@ private:
     // Scratch space for operations
     std::unique_ptr<ScratchSpace> scratch;
 
-    // stuff needed for multiprocessing using OpenMP
-    size_t num_threads;
-    std::vector<std::unique_ptr<ScratchSpace>> thread_scratch;
+    // Build-time threading
+    size_t build_threads;
+    std::vector<std::unique_ptr<ScratchSpace>> build_scratch;
+
+    // Search-time threading  
+    size_t search_threads;
+    std::vector<std::unique_ptr<ScratchSpace>> search_scratch;
 
 public:
     // Constructor/Destructor
@@ -63,14 +67,14 @@ public:
     
     /**
      * Search for k nearest neighbors to the query vector
-     * Uses greedy graph traversal starting from the medoid
+     * Single-threaded per-query search. For batch parallelism, call this
+     * from multiple threads (e.g., with OpenMP parallel for)
      * @param query Query vector (dimension floats)
      * @param k Number of nearest neighbors to return
      * @param search_L Candidate list size for this search (0 = use default L)
-     * @param num_threads Number of threads to use for parallel search (0 = select maximum available threads, default = 1)
      * @return Vector of k nearest neighbors sorted by distance
      */
-    std::vector<Neighbor> search(const float *query, size_t k, size_t search_L = 0, size_t num_threads = 1);
+    std::vector<Neighbor> search(const float *query, size_t k, size_t search_L = 0);
 
     // I/O operations
     /**
@@ -83,9 +87,11 @@ public:
     /**
      * Load a previously saved index from disk
      * Loads both graph structure and metadata
+     * Initializes search scratch spaces for parallel batch search
      * @param filename Base filename to load from
+     * @param num_threads Number of threads for parallel batch search (0 = use all available)
      */
-    void load_index(const std::string &filename);
+    void load_index(const std::string &filename, size_t num_threads = 0);
 
     // Utility functions
     location_t get_medoid() const { return medoid; }
@@ -101,7 +107,9 @@ public:
 
 private:
     
-    void initialize_thread_pool();
+    // Thread pool initialization helpers
+    void initialize_build_scratch(size_t num_threads);
+    void initialize_search_scratch(size_t num_threads);
 
     // Core algorithms
     /**

@@ -38,6 +38,9 @@ const std::vector<location_t>& Graph::get_neighbors(location_t node) const {
     return adj_list[node];
 }
 
+// const at the end just means, that calling this function wont change modify anything
+// inside the object. so kinda signifies, the operations being performed on the object
+// would be read only
 size_t Graph::degree(location_t node) const {
     if (node >= adj_list.size()) {
         return 0;

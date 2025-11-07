@@ -213,11 +213,19 @@ void VamanaIndex::search_and_prune(location_t location) {
     // Use local scratch space for result
     auto& pruned = local_scratch->result_buffer;
     pruned.clear();
+    
     occlude_list(location, candidates, pruned, local_scratch.get());
     
     // Update graph
-    graph.set_neighbors(location, pruned);
-    
+    // while updating the source node, lock its neighbors
+    // we aquire and release the mutex lock in the below scope, 
+    // lock_guard which was defined in this scope, 
+    // the destructor for it is automatically called for lock_guard as we leave the scope 
+    {
+        std::lock_guard<std::mutex> guard(node_locks[location]);
+        graph.set_neighbors(location, pruned);
+    }
+
     // Reverse link insertion (inter_insert)
     for (location_t neighbor : pruned) {
         auto neighbor_list = graph.get_neighbors(neighbor);

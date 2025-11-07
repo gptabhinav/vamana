@@ -7,6 +7,7 @@
 #include "vamana/core/distance.h"
 #include <vector>
 #include <memory>
+#include <mutex>
 
 class VamanaIndex
 {
@@ -22,6 +23,9 @@ private:
     size_t L;    // candidate list size
     float alpha; // diversity parameter
     size_t maxc; // max candidates for pruning
+
+    // mutex for thread safety
+    std::vector<std::mutex> node_locks;
 
     // Scratch space for operations
     std::unique_ptr<ScratchSpace> scratch;

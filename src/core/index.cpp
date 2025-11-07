@@ -64,6 +64,10 @@ void VamanaIndex::build(float* data_ptr, size_t num_pts, size_t num_threads) {
     
     // Initialize graph
     graph.resize(num_points);
+
+    // Initialize node locks
+    node_locks.clear();
+    node_locks.resize(num_points);
     
     // Create initial random graph
     initialize_random_graph();

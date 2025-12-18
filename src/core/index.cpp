@@ -12,7 +12,7 @@
 VamanaIndex::VamanaIndex(size_t dim, size_t R, size_t L, float alpha, size_t maxc) 
     : data(nullptr), num_points(0), dimension(dim), medoid(0),
       R(R), L(L), alpha(alpha), maxc(maxc),
-      build_threads(0), search_threads(0) {
+      is_building(false), build_threads(0), search_threads(0) {
 
 }
 
@@ -50,6 +50,9 @@ void VamanaIndex::build(float* data_ptr, size_t num_pts, size_t num_threads) {
     data = data_ptr;
     num_points = num_pts;
 
+    // Set build mode flag
+    is_building = true;
+
     // Determine build thread count
     if(num_threads == 0){
         #ifdef _OPENMP
@@ -65,15 +68,23 @@ void VamanaIndex::build(float* data_ptr, size_t num_pts, size_t num_threads) {
     // Initialize graph
     graph.resize(num_points);
 
-    // Initialize node locks
+    // Initialize per-node locks for thread-safe updates
     node_locks.clear();
-    node_locks.resize(num_points);
+    node_locks.reserve(num_points);
+    for (size_t i = 0; i < num_points; i++) {
+        node_locks.push_back(std::make_unique<std::mutex>());
+    }
+    
+    std::cout << "Initialized " << node_locks.size() << " node locks" << std::endl;
     
     // Create initial random graph
+    std::cout << "Initializing random graph..." << std::endl;
     initialize_random_graph();
     
+    std::cout << "Finding medoid..." << std::endl;
     // Find medoid
     medoid = find_medoid();
+    std::cout << "Medoid: " << medoid << std::endl;
     
     // Iterative improvement -- PARALLEL
     // 2048 is just what is being used in DiskANN, it is probably good middleground for performance
@@ -98,6 +109,9 @@ void VamanaIndex::build(float* data_ptr, size_t num_pts, size_t num_threads) {
     }
 
     std::cout << std::endl;
+    
+    // Build complete - turn off build mode
+    is_building = false;
 }
 
 std::vector<Neighbor> VamanaIndex::search(const float* query, size_t k, size_t search_L) {
@@ -216,41 +230,65 @@ void VamanaIndex::search_and_prune(location_t location) {
     
     occlude_list(location, candidates, pruned, local_scratch.get());
     
-    // Update graph
-    // while updating the source node, lock its neighbors
-    // we aquire and release the mutex lock in the below scope, 
-    // lock_guard which was defined in this scope, 
-    // the destructor for it is automatically called for lock_guard as we leave the scope 
+    // Update SOURCE node's neighbors (with lock)
     {
-        std::lock_guard<std::mutex> guard(node_locks[location]);
+        std::lock_guard<std::mutex> guard(*node_locks[location]);
         graph.set_neighbors(location, pruned);
     }
 
-    // Reverse link insertion (inter_insert)
+    // Reverse link insertion (inter_insert) - lock each TARGET neighbor
     for (location_t neighbor : pruned) {
-        auto neighbor_list = graph.get_neighbors(neighbor);
-        std::vector<location_t> updated_neighbors(neighbor_list.begin(), neighbor_list.end());
-        updated_neighbors.push_back(location);
+        std::vector<location_t> copy_of_neighbors;
+        bool prune_needed = false;
         
-        if (updated_neighbors.size() > R) {
-            // Re-prune neighbor's list using local scratch space
+        // Phase 1: Check and decide (with lock on TARGET)
+        {
+            std::lock_guard<std::mutex> guard(*node_locks[neighbor]);
+            
+            auto neighbor_list = graph.get_neighbors(neighbor);
+            
+            // Check if reverse link already exists
+            if (std::find(neighbor_list.begin(), neighbor_list.end(), location) 
+                == neighbor_list.end()) {
+                
+                if (neighbor_list.size() < R * 1.5) {  // SLACK factor
+                    // Room to add without pruning
+                    std::vector<location_t> updated(neighbor_list.begin(), 
+                                                   neighbor_list.end());
+                    updated.push_back(location);
+                    graph.set_neighbors(neighbor, updated);
+                } else {
+                    // Need to prune - copy data for processing outside lock
+                    copy_of_neighbors.assign(neighbor_list.begin(), 
+                                            neighbor_list.end());
+                    copy_of_neighbors.push_back(location);
+                    prune_needed = true;
+                }
+            }
+        } // Release lock on TARGET
+        
+        // Phase 2: Expensive pruning (NO lock - happens in parallel)
+        if (prune_needed) {
             auto& neighbor_candidates = local_scratch->neighbor_pool;
             neighbor_candidates.clear();
             const float* neighbor_data = data + neighbor * dimension;
             
-            for (location_t n : updated_neighbors) {
+            for (location_t n : copy_of_neighbors) {
                 const float* n_data = data + n * dimension;
                 float d = adaptive_l2_distance(neighbor_data, n_data, dimension);
                 neighbor_candidates.emplace_back(n, d);
             }
             
-            // Reuse result_buffer for pruned neighbors
-            auto& pruned_neighbors = local_scratch->result_buffer;
-            pruned_neighbors.clear();
-            occlude_list(neighbor, neighbor_candidates, pruned_neighbors, local_scratch.get());
-            graph.set_neighbors(neighbor, pruned_neighbors);
-        } else {
-            graph.set_neighbors(neighbor, updated_neighbors);
+            // Use a temporary vector for pruned neighbors (don't reuse result_buffer!)
+            std::vector<location_t> pruned_neighbors;
+            occlude_list(neighbor, neighbor_candidates, pruned_neighbors, 
+                        local_scratch.get());
+            
+            // Phase 3: Update with pruned list (lock TARGET again)
+            {
+                std::lock_guard<std::mutex> guard(*node_locks[neighbor]);
+                graph.set_neighbors(neighbor, pruned_neighbors);
+            }
         }
     }
 }
@@ -289,8 +327,24 @@ std::vector<Neighbor> VamanaIndex::greedy_search(const float* query, size_t sear
         visited.insert(curr.id);
         candidates.push_back(curr);
         
-        // Explore neighbors
-        for (location_t neighbor : graph.get_neighbors(curr.id)) {
+        // Explore neighbors - copy under lock during build to avoid race
+        std::vector<location_t> neighbors_copy;
+        if (is_building) {
+            std::lock_guard<std::mutex> guard(*node_locks[curr.id]);
+            neighbors_copy = graph.get_neighbors(curr.id);
+        } else {
+            // During search, graph is read-only so no lock needed
+            neighbors_copy = graph.get_neighbors(curr.id);
+        }
+        
+        for (location_t neighbor : neighbors_copy) {
+            // Bounds check to prevent accessing invalid memory
+            if (neighbor >= num_points) {
+                std::cerr << "ERROR: Invalid neighbor ID " << neighbor 
+                         << " (>= num_points " << num_points << ") from node " << curr.id << std::endl;
+                continue;
+            }
+            
             if (!visited.count(neighbor)) {
                 const float* neighbor_data = data + neighbor * dimension;
                 float d = adaptive_l2_distance(query, neighbor_data, dimension);

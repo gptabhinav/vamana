@@ -24,8 +24,9 @@ private:
     float alpha; // diversity parameter
     size_t maxc; // max candidates for pruning
 
-    // mutex for thread safety
-    std::vector<std::mutex> node_locks;
+    // Per-node locks for thread-safe graph updates during parallel build
+    std::vector<std::unique_ptr<std::mutex>> node_locks;
+    bool is_building;  // Flag to indicate if we're in build mode (locks needed)
 
     // Scratch space for operations
     std::unique_ptr<ScratchSpace> scratch;

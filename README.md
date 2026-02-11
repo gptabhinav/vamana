@@ -148,4 +148,6 @@ After building, executables are organized in `build/`:
 
 Vamana builds a graph where each node represents a data point. During construction, it uses diversity-aware pruning (occlude_list) to select good neighbors. For search, it performs greedy traversal starting from a computed medoid to find approximate nearest neighbors efficiently.
 
+## Visualization
+
 ![Ephys Visualization](static/ephys_visualization.gif)
